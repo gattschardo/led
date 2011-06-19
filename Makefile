@@ -13,7 +13,7 @@ doc: $(base).pdf
 program: src
 	chmod +x $(script)
 
-src: ed_parser.erl ed_main.erl ed_scanner.beam ed_buffer.erl $(script)
+src: ed_parser.beam ed_main.erl ed_scanner.beam ed_buffer.erl $(script)
 
 clean:
 	$(RM) $(base).{pdf,log,aux,tex,toc} *.{erl,yrl,beam} $(script)

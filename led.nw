@@ -151,7 +151,7 @@ maintain than a hand-written parser}.
 The terminal symbols for the grammar are as follows:
 % why do these get indexed in section two??
 <<parser terminals>>=
-Terminals ',' '\n' 'p' 'integer' '.' '$' 'atom'.
+Terminals ',' '\n' 'integer' '.' '$' 'atom' 'print'.
 @
 
 Note that [[integer]] and [[atom]] are provided by [[erl_scan]] and are simply
@@ -159,7 +159,7 @@ Erlang integers resp. atoms.
 
 The nonterminals that we will need are the following
 <<parser nonterminals>>=
-Nonterminals commands command action region print.
+Nonterminals commands command action region print_act.
 @
 
 We will of course be parsing commands one by one, but in non-interactive mode
@@ -175,32 +175,42 @@ can just be [[command]] instead of [[commands]].
 To get a general idea how [[yecc]] input looks like, here is the print
 action:
 <<parser print>>=
-print ->
-	region 'p' :
-	['$1'].
+print_act ->
+	region 'print' :
+	[print, '$1'].
 @
 
-<<top>>=
-commands -> commands command : [].
-commands -> command : [].
+<<parser top>>=
+commands ->
+	commands command :
+	['$2'|'$1'].
+commands ->
+	command :
+	'$1'.
 
 command ->
 	action '\n' :
-	['$1'].
+	'$1'.
+command ->
+	action :
+	'$1'.
 
 action ->
-	print :
-	['$1'].
+	print_act :
+	'$1'.
 
 region ->
 	'integer' ',' 'integer' :
-	['$1', '$2', '$3'].
+	[region, '$1', '$2', '$3'].
 region ->
-	'integer' : ['$1'].
+	'integer' :
+	[region, '$1'].
 region ->
-	'.' : [] .
+	'.' :
+	[region, '$1'] .
 region ->
-	'$' : [] .
+	'$' :
+	[region, '$1'] .
 @
 
 So, all in all, the parser becomes:
@@ -208,7 +218,7 @@ So, all in all, the parser becomes:
 <<parser nonterminals>>
 <<parser terminals>>
 <<parser root>>
-<<top>>
+<<parser top>>
 <<parser print>>
 @
 
