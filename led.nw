@@ -1,0 +1,27 @@
+\documentclass{article}
+\usepackage{noweb}
+
+\author{Richard ``[[gattschardo]]'' Molitor}
+\title{led - Literate [[ed]]}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+
+Welcome to [[led]]! First, lets make clear what [[led]] is - it stands for
+``literate ed'', where [[ed]] of course is the name of the standard text editor
+(on \texttt{Unix} anyways). So [[led]] is just a clone of the original [[ed]] --
+whether it ever becomes fully functional only the future will show. However it's
+not the primary goal of [[led]] to become a fully operational [[ed]] clone,
+anyway (use GNU or any BSD [[ed]] for that). Well then, what is the purpose of
+this thing? This is where the literate part comes in: It's just an experiement
+with literate programming -- I want to see whether this is a useful approach to
+programming or not. Also, [[led]] is meant to teach me some more things about
+[[ed]] itself (which is a quite nice program), and also about programming in
+Erlang, since that is the language in which it is implemented. Especially, one
+of the goals is to figure out [[yecc]], the Erlang version of the well known
+[[yacc]] parser generator.
+
+\end{document}
