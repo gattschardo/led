@@ -13,10 +13,13 @@ doc: $(base).pdf
 program: src
 	chmod +x $(script)
 
-src: ed_parser.erl ed_main.erl ed_scanner.erl ed_buffer.erl $(script)
+src: ed_parser.erl ed_main.erl ed_scanner.beam ed_buffer.erl $(script)
 
 clean:
-	$(RM) $(base).{pdf,log,aux,tex}
+	$(RM) $(base).{pdf,log,aux,tex,toc} *.{erl,yrl,beam} $(script)
+
+ed_parser.erl: ed_parser.yrl
+	$(ERLC) -W $<
 
 ed_parser.yrl: $(base).nw
 	$(TANGLE) -R'[[$@]]' $< > $@
@@ -34,5 +37,5 @@ $(script): $(base).nw
 %.erl: $(base).nw
 	$(TANGLE) -R'[[$@]]' $< > $@
 
-%.erl: %.yrl
+%.beam: %.erl
 	$(ERLC) -W $<

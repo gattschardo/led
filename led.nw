@@ -82,8 +82,61 @@ file name) to main.
 
 \section{The Scanner}
 
+The scanner must tokenize the input coming from an input port into an array
+containing tuples of the form [[{Category, Line, Symbol}]] or, in case of
+one-element categories [[{Symbol, Line}]].
+
+Actually, I the module [[io]] does pretty much what I need already, so
+for now my scanner will just be a post-processor on it's output, doing some
+[[ed]]-specific conversions. When I run into trouble with that, I can still
+implement my own.
+
+<<scan>>=
+scan(Inport) ->
+	scan(Inport, '', 1).
+@ 
+
+Calling [[scan]] with just one argument will just fall back to the general
+version, using an empty prompt and 1 as line number.
+
+<<scan>>=
+scan(Inport, Prompt, Line1) ->
+	case catch io:scan_erl_form(Inport, Prompt, Line1) of
+		{eof, Line2} ->
+			{eof, Line2};
+		{ok, Tokens, Line2} ->
+			{ok, lex(Tokens), Line2};
+		{error, Descr, Line2} ->
+			{error, Descr, Line2};
+		{'EXIT', Why} ->
+			io:format("scanner error at line ~w~n", [Line1]),
+			exit(Why)
+	end.
+@
+
+Handle some error conditions, or else [[lex]] tokens, when you get them.
+
+<<lex>>=
+lex([]) ->
+	[];
+lex([Token | Tokens]) ->
+	case Token of
+		{atom, Line, p} ->
+			[{print, Line} | lex(Tokens)];
+		{Cat, Line, Sym} ->
+			[{Cat, Line, Sym} | lex(Tokens)];
+		{Other, Line} ->
+			[{Other, Line} | lex(Tokens)]
+	end.
+@
+
+Empty list means we're done, the atom [[p]] will be recognized as print
+action, everything else will just be passed through.
+
 <<[[ed_scanner.erl]]>>=
-	<<scanner head>>
+<<scanner head>>
+<<scan>>
+<<lex>>
 @
 
 \section{The Parser}
@@ -91,15 +144,18 @@ file name) to main.
 Ok, so let's start defining the grammar for the parser. Of course, in practice
 it may not be very rewarding to write a grammar for [[ed]] input, since it's
 not very complex and a hand-coded parser should work fine. But remember, I'm
-trying to learn [[yecc]], here\footnote{Also not that Pippijn says a formal
-grammar is always good thing to have, since it will always be easier to
+trying to learn [[yecc]], here\footnote{Also note that Pippijn says a formal
+grammar is always a good thing to have, since it will always be easier to
 maintain than a hand-written parser}.
 
 The terminal symbols for the grammar are as follows:
 % why do these get indexed in section two??
 <<parser terminals>>=
-Terminals ',' '\n' 'p' 'number' '.' '$'.
+Terminals ',' '\n' 'p' 'integer' '.' '$' 'atom'.
 @
+
+Note that [[integer]] and [[atom]] are provided by [[erl_scan]] and are simply
+Erlang integers resp. atoms.
 
 The nonterminals that we will need are the following
 <<parser nonterminals>>=
@@ -137,10 +193,10 @@ action ->
 	['$1'].
 
 region ->
-	'number' ',' 'number' :
+	'integer' ',' 'integer' :
 	['$1', '$2', '$3'].
 region ->
-	'number' : ['$1'].
+	'integer' : ['$1'].
 region ->
 	'.' : [] .
 region ->
@@ -159,20 +215,20 @@ So, all in all, the parser becomes:
 \section{The Buffer Data Structure}
 
 <<[[ed_buffer.erl]]>>=
-	<<buffer head>>
+<<buffer head>>
 @
 
 \section{The Main Module}
 
 <<[[ed_main.erl]]>>=
-	<<main head>>
+<<main head>>
 @
 
 \section{The Startup Script}
 
 <<[[led.sh]]>>=
-	<<script head>>
-	echo "Hello, led!"
+<<script head>>
+echo "Hello, led!"
 @
 
 \section{Conclusion}
