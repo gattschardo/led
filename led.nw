@@ -1,31 +1,63 @@
 \documentclass{scrartcl}
 \usepackage{noweb}
 
-\author{Richard ``[[gattschardo]]'' Molitor}
 \title{led - Literate [[ed]]}
+\author{Richard ``[[gattschardo]]'' Molitor}
+\date{June 19, 2011 - \today} % this will eventually make sense
 
 \begin{document}
 
 \maketitle
 
+\tableofcontents
+
 \section{Introduction}
 
 Welcome to [[led]]! First, let's make clear what [[led]] is - it stands for
-``literate [[ed]]'', where [[ed]] of course is the name of the standard text editor
-(on \textsc{Unix} anyways). So [[led]] is just a clone of the original [[ed]] --
-whether it ever becomes fully functional only the future will show.
+``literate [[ed]]'', where [[ed]] of course is the name of the standard text
+editor (on \textsc{Unix} anyways). So [[led]] is just a clone of the original
+[[ed]] -- whether it ever becomes fully functional only the future will show.
 
-However it's
-not the primary goal of [[led]] to become a fully operational [[ed]] clone,
--- use the \textsc{Gnu} or some \textsc{Bsd} variant for that. So, what is the purpose of
-this thing? This is where the ``literate'' part comes in: It's just an experiement
-with literate programming -- I want to see whether this approach to
-programming works out for me or not. Also, [[led]] is meant to teach me some more things about
-[[ed]] itself (which is a quite nice program)\footnote{To be true to my own
-word, I should actually be \emph{writing} this in [[ed]], but well, shame on me,
-looks like I'll be using \textsc{Vim}, mainly for its nice [[make]] integration}, and also about programming in
-Erlang, since that is the language in which it is implemented. Especially, one
-of the goals is to figure out [[yecc]], the Erlang version of the well known
-[[yacc]] parser generator.
+However it's not the primary goal of [[led]] to become a fully operational
+[[ed]] clone, -- use the \textsc{Gnu} or some \textsc{Bsd} variant for that. So,
+what is the purpose of this thing? This is where the ``literate'' part comes in:
+It's just an experiement with literate programming -- I want to see whether this
+approach to programming works out for me or not. Also, [[led]] is meant to teach
+me some more things about [[ed]] itself (which is a quite nice
+program)\footnote{To be true to my own word, I should actually be \emph{writing}
+this in [[ed]], but well, shame on me, looks like I'll be using \textsc{Vim},
+mainly for its nice [[make]] integration}, and also about programming in Erlang,
+since that is the language in which it is implemented. Especially, one of the
+goals is to figure out [[yecc]], the Erlang version of the well known [[yacc]]
+parser generator.
+
+\newpage
+
+\section{The Big Picture}
+
+Since [[ed]] is a fairly simple program (which is of course among the reasons
+I choose it for this experiement), it is split into three parts:
+
+\begin{description}
+
+\item	[the parser]
+will parse lines of input into an abstract syntax representation (generated
+from [[yecc]] grammar).
+
+\item	[the buffer]
+is the abstract data structure modeling the edit buffer, supporting operations
+such as [[get]], [[append]] and [[change]].
+
+\item 	[main]
+will do the rest, that is, reading and writing buffers to file, initializing
+the parser and buffer, shutting everything down
+
+\item	[the startup script]
+will start the Erlang VM and pass in the command line arguments (like, the
+file name) to main.
+
+\end{description}
 
 \end{document}
+
+% vim: se tw=78:
