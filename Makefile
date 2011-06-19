@@ -1,12 +1,28 @@
 WEAVE := noweave
 TANGLE := notangle
 PDFLATEX := pdflatex
+ERLC := erlc
 
-target_base := led
+base := led
+script := $(base).sh
 
-all: doc
+all: doc program
 
-doc: $(target_base).pdf
+doc: $(base).pdf
+
+program: src
+	chmod +x $(script)
+
+src: ed_parser.erl ed_main.erl ed_scanner.erl ed_buffer.erl $(script)
+
+clean:
+	$(RM) $(base).{pdf,log,aux,tex}
+
+ed_parser.yrl: $(base).nw
+	$(TANGLE) -R'[[$@]]' $< > $@
+
+$(script): $(base).nw
+	$(TANGLE) -R'[[$@]]' $< > $@
 
 %.tex: %.nw
 	$(WEAVE)  -delay -index $< > $@
@@ -15,8 +31,8 @@ doc: $(target_base).pdf
 	$(PDFLATEX) $< # run twice for indexing
 	#$(PDFLATEX) $<
 
-%: %.nw
-	$(TANGLE) -R$@ $< > $@
+%.erl: $(base).nw
+	$(TANGLE) -R'[[$@]]' $< > $@
 
-clean:
-	$(RM) $(target_base).{pdf,log,aux,tex}
+%.erl: %.yrl
+	$(ERLC) -W $<

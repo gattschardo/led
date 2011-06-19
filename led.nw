@@ -24,21 +24,30 @@ what is the purpose of this thing? This is where the ``literate'' part comes in:
 It's just an experiement with literate programming -- I want to see whether this
 approach to programming works out for me or not. Also, [[led]] is meant to teach
 me some more things about [[ed]] itself (which is a quite nice
-program)\footnote{To be true to my own word, I should actually be \emph{writing}
-this in [[ed]], but well, shame on me, looks like I'll be using \textsc{Vim},
-mainly for its nice [[make]] integration}, and also about programming in Erlang,
-since that is the language in which it is implemented. Especially, one of the
-goals is to figure out [[yecc]], the Erlang version of the well known [[yacc]]
-parser generator.
+program)\footnote{To be true to my own word, I should actually be writing this
+in [[ed]], but well, shame on me, looks like I'll be using \textsc{Vim},
+mainly for its nice [[make]] integration}, and also about programming in
+Erlang, since that is the language in which it is implemented. Especially, one
+of the goals is to figure out [[yecc]], the Erlang version of the well known
+[[yacc]] parser generator.
 
-\newpage
+%\newpage
 
 \section{The Big Picture}
 
 Since [[ed]] is a fairly simple program (which is of course among the reasons
-I choose it for this experiement), it is split into three parts:
+I choose it for this experiement), it is split into five parts, each of which
+is then described in it's own section:
 
 \begin{description}
+
+\item 	[the scanner]
+tokenizes the input for the parser.
+<<scanner head>>=
+-module(ed_scanner).
+
+-compile(export_all).
+@
 
 \item	[the parser]
 will parse lines of input into an abstract syntax representation (generated
@@ -47,16 +56,136 @@ from [[yecc]] grammar).
 \item	[the buffer]
 is the abstract data structure modeling the edit buffer, supporting operations
 such as [[get]], [[append]] and [[change]].
+<<buffer head>>=
+-module(ed_buffer).
+
+-compile(export_all). % debug only
+@
 
 \item 	[main]
 will do the rest, that is, reading and writing buffers to file, initializing
 the parser and buffer, shutting everything down
+<<main head>>=
+-module(ed_main).
+
+-compile(export_all).% as above
+@
 
 \item	[the startup script]
 will start the Erlang VM and pass in the command line arguments (like, the
 file name) to main.
+<<script head>>=
+#!/bin/sh
+@
 
 \end{description}
+
+\section{The Scanner}
+
+<<[[ed_scanner.erl]]>>=
+	<<scanner head>>
+@
+
+\section{The Parser}
+
+Ok, so let's start defining the grammar for the parser. Of course, in practice
+it may not be very rewarding to write a grammar for [[ed]] input, since it's
+not very complex and a hand-coded parser should work fine. But remember, I'm
+trying to learn [[yecc]], here\footnote{Also not that Pippijn says a formal
+grammar is always good thing to have, since it will always be easier to
+maintain than a hand-written parser}.
+
+The terminal symbols for the grammar are as follows:
+% why do these get indexed in section two??
+<<parser terminals>>=
+Terminals ',' '\n' 'p' 'number' '.' '$'.
+@
+
+The nonterminals that we will need are the following
+<<parser nonterminals>>=
+Nonterminals commands command action region print.
+@
+
+We will of course be parsing commands one by one, but in non-interactive mode
+there can of course be several at once:
+<<parser root>>=
+Rootsymbol commands.
+@
+Actually, this might not be what I need, though, the question is how the
+parsing works, that is, whether is parses incomplete input. If not, I'll need
+to restart a new parser for each command, and then of course, the root symbol
+can just be [[command]] instead of [[commands]].
+
+To get a general idea how [[yecc]] input looks like, here is the print
+action:
+<<parser print>>=
+print ->
+	region 'p' :
+	['$1'].
+@
+
+<<top>>=
+commands -> commands command : [].
+commands -> command : [].
+
+command ->
+	action '\n' :
+	['$1'].
+
+action ->
+	print :
+	['$1'].
+
+region ->
+	'number' ',' 'number' :
+	['$1', '$2', '$3'].
+region ->
+	'number' : ['$1'].
+region ->
+	'.' : [] .
+region ->
+	'$' : [] .
+@
+
+So, all in all, the parser becomes:
+<<[[ed_parser.yrl]]>>=
+<<parser nonterminals>>
+<<parser terminals>>
+<<parser root>>
+<<top>>
+<<parser print>>
+@
+
+\section{The Buffer Data Structure}
+
+<<[[ed_buffer.erl]]>>=
+	<<buffer head>>
+@
+
+\section{The Main Module}
+
+<<[[ed_main.erl]]>>=
+	<<main head>>
+@
+
+\section{The Startup Script}
+
+<<[[led.sh]]>>=
+	<<script head>>
+	echo "Hello, led!"
+@
+
+\section{Conclusion}
+
+It's fun, try it!
+
+\section{Defined Chunks}
+
+\nowebchunks
+
+%\section{Index}
+%
+%\nowebindex
 
 \end{document}
 
