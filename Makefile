@@ -31,7 +31,7 @@ $(script): $(base).nw
 	$(WEAVE)  -delay -index $< > $@
 
 %.pdf: %.tex
-	$(PDFLATEX) $< > /dev/null # run twice for indexing
+	$(PDFLATEX) $< #> /dev/null # run twice for indexing
 	#$(PDFLATEX) $<
 
 %.erl: $(base).nw
