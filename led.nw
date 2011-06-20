@@ -1,3 +1,5 @@
+% -*- mode: Noweb; noweb-code-mode: erlang-mode -*-
+
 \documentclass{scrartcl}
 \usepackage{noweb}
 
@@ -86,51 +88,102 @@ The scanner must tokenize the input coming from an input port into an array
 containing tuples of the form [[{Category, Line, Symbol}]] or, in case of
 one-element categories [[{Symbol, Line}]].
 
-Actually, I the module [[io]] does pretty much what I need already, so
-for now my scanner will just be a post-processor on it's output, doing some
-[[ed]]-specific conversions. When I run into trouble with that, I can still
-implement my own.
+At first I believed that I could get away with using the
+[[scan_erl_form]] from the [[io]] module and post-processing it's
+output a bit, but this is not going to work well, because I cannot
+have whitespace filtered out in regular expressions, for example.
+
+So, now there is my own (which always only reads from \textit{stdin},
+but that should be fine for [[ed]].
 
 <<scan>>=
-scan(Inport) ->
-	scan(Inport, '', 1).
-@ 
-
-Calling [[scan]] with just one argument will just fall back to the general
-version, using an empty prompt and 1 as line number.
-
-<<scan>>=
-scan(Inport, Prompt, Line1) ->
-	case catch io:scan_erl_form(Inport, Prompt, Line1) of
-		{eof, Line2} ->
-			{eof, Line2};
-		{ok, Tokens, Line2} ->
-			{ok, lex(Tokens), Line2};
-		{error, Descr, Line2} ->
-			{error, Descr, Line2};
-		{'EXIT', Why} ->
-			io:format("scanner error at line ~w~n", [Line1]),
-			exit(Why)
-	end.
+scan() ->
+    case io:get_line( "led> " ) of
+	eof ->
+	    {eof, 1};
+	{ error, Reason } ->
+	    { error, Reason, 1 };
+	Line ->
+	    %io:format( "Lexing ~s~w",[ Line ]),
+	    { ok, lex( Line ), 1 }
+    end.
 @
 
 Handle some error conditions, or else [[lex]] tokens, when you get them.
 
 <<lex>>=
-lex([]) ->
-	[];
-lex([Token | Tokens]) ->
-	case Token of
-		{atom, Line, p} ->
-			[{print, Line} | lex(Tokens)];
-		{Cat, Line, Sym} ->
-			[{Cat, Line, Sym} | lex(Tokens)];
-		{Other, Line} ->
-			[{Other, Line} | lex(Tokens)]
-	end.
+lex( Tokens ) ->
+    lex( Tokens, []).
+
+lex( [], Result ) ->
+    lists:reverse( Result );
+lex( [ Token | Ts ]= In, Result ) ->
+    Digit = is_digit( Token ),
+    Special = is_special( Token ),
+    Print = is_print( Token ),
+    White = is_whitespace( Token ),
+    if
+	Digit ->
+	    { Int, Rest } = string:to_integer( In ),
+	    lex( Rest,[{ integer, 1, Int }| Result ]);
+	Special ->  
+	    lex( Ts,[{ list_to_atom([ Token ]), 1 }| Result ]);
+	Print ->
+	    lex( Ts,[{ print, 1, Token }| Result ]);
+	White ->
+	    lex( Ts,[{ whitespace, 1, Token }| Result ]);
+	true ->
+	    lex( Ts,[{ letter, 1, Token }| Result ])
+    end.
 @
 
-Empty list means we're done, the atom [[p]] will be recognized as print
+When we find a digit, we can simply let [[string:to_integer/1]] do the
+conversion work, since it conveniently spits out the rest of the
+string after the end of our integer.
+
+Now, of course, we need to tell what a digit is -- for this it simply
+suffices to check the ascii codes for 0 and 9 for now (Erlang has no
+representation for single characters, so I'm giving their numeric
+values, 48 and 57).
+
+<<lex>>=
+is_digit(Char) ->
+    if
+	Char >= 48, Char =< 57 ->
+	    true;
+	Char < 48; Char > 57 ->
+	    false
+    end.
+@ 
+
+This is a mighty ugly scanner. It has lousy performance, too:
+
+<<lex>>=
+is_special( 44 ) -> % ,
+    true;
+is_special( 10 ) -> % \n
+    true;
+is_special( 46 ) -> % .
+    true;
+is_special( 36 ) -> % $
+    true;
+is_special( _ ) ->
+    false.
+
+is_whitespace( 9 ) -> % \t
+    true;
+is_whitespace( 32) -> % space
+    true;
+is_whitespace( _ ) -> 
+    false.
+
+is_print( 112 ) -> % p
+    true;
+is_print( _ ) ->
+    false.
+@ 
+
+Empty list means we're done, the [[p]] will be recognized as print
 action, everything else will just be passed through.
 
 <<[[ed_scanner.erl]]>>=
@@ -144,36 +197,40 @@ action, everything else will just be passed through.
 Ok, so let's start defining the grammar for the parser. Of course, in practice
 it may not be very rewarding to write a grammar for [[ed]] input, since it's
 not very complex and a hand-coded parser should work fine. But remember, I'm
-trying to learn [[yecc]], here\footnote{Also note that Pippijn says a formal
+trying to learn \textsc{Yecc}, here\footnote{Also note that Pippijn says a formal
 grammar is always a good thing to have, since it will always be easier to
 maintain than a hand-written parser}.
 
 The terminal symbols for the grammar are as follows:
-% why do these get indexed in section two??
+
 <<parser terminals>>=
-Terminals ',' '\n' 'integer' '.' '$' 'atom' 'print'.
+Terminals ',' '\n' 'integer' '.' '$' 'print'.
 @
 
 Note that [[integer]] and [[atom]] are provided by [[erl_scan]] and are simply
 Erlang integers resp. atoms.
 
 The nonterminals that we will need are the following
+
 <<parser nonterminals>>=
 Nonterminals commands command action region print_act.
 @
 
 We will of course be parsing commands one by one, but in non-interactive mode
 there can of course be several at once:
+
 <<parser root>>=
 Rootsymbol commands.
 @
+
 Actually, this might not be what I need, though, the question is how the
 parsing works, that is, whether is parses incomplete input. If not, I'll need
 to restart a new parser for each command, and then of course, the root symbol
 can just be [[command]] instead of [[commands]].
 
-To get a general idea how [[yecc]] input looks like, here is the print
+To get a general idea how \textsc{Yecc} input looks like, here is the print
 action:
+
 <<parser print>>=
 print_act ->
 	region 'print' :
@@ -210,7 +267,7 @@ region ->
 	[region, '$1'] .
 region ->
 	'$' :
-	[region, '$1'] .
+	[region, '$1'] . %$
 @
 
 So, all in all, the parser becomes:
@@ -230,15 +287,47 @@ So, all in all, the parser becomes:
 
 \section{The Main Module}
 
+For now, the main module just parses lines of input and either prints
+the resulting syntax tree, or exits.
+
+<<main parse>>=
+start() ->
+    loop().
+
+loop() ->
+    case step() of
+	true ->
+	    loop();
+	false ->
+	    "Bye"
+    end.
+
+step() ->
+    { ok, T, 1 }= ed_scanner:scan(),
+    case ed_parser:parse( T ) of
+	{ ok, S } ->
+	    io:format( "S-Tree: ~w~n",[ S ]),
+	    true;
+	{ error,{ _Line, ed_parser,[ Err, Message ]}} ->
+	    io:format( "~s~s~n",[ Err, Message ]),
+	    false
+    end.
+@ 
+
 <<[[ed_main.erl]]>>=
 <<main head>>
+<<main parse>>
 @
 
 \section{The Startup Script}
 
+Just start the main method (without passing any arguments, for now).
+
 <<[[led.sh]]>>=
 <<script head>>
+
 echo "Hello, led!"
+erl -noshell -pa ~/code/led -s ed_main start -s init stop
 @
 
 \section{Conclusion}
