@@ -57,8 +57,6 @@ is the abstract data structure modeling the edit buffer, supporting operations
 such as [[get]], [[append]] and [[change]].
 <<buffer head>>=
 -module(ed_buffer).
-
--compile(export_all). % debug only
 @
 
 \item         [main]
@@ -298,6 +296,35 @@ get_token( 121 ) -> % y
     yank_tok.
 @ 
 
+Another thing that I decided to put into the scanner (as it is also concerned
+with reading user input) is the function to read chunks ended by [[.]] on a
+line by itself. if will just return it as a list of strings, one for each
+line:
+
+<<read chunk>>=
+read_chunk() ->
+    Ch = read_chunk([]),
+    %io:format ("Chunk is ~p, reversing~n", [ Ch ]),
+    lists:reverse( Ch ).
+
+read_chunk( Ls ) ->
+    Termination = ".\n",
+    case io:get_line( "chunk> " ) of
+        eof ->
+            Ls;
+        { error, _Reason } ->
+            Ls;
+        Line ->
+	    %io:format ("Read ~p~n", [ Line ]),
+            if
+		Line == Termination ->
+		    Ls;
+		Line /= Termination ->
+		    read_chunk([ Line | Ls ])
+	    end
+    end.
+@
+
 That's it, now lets bring it together in one file:
 
 <<[[ed_scanner.erl]]>>=
@@ -309,6 +336,7 @@ That's it, now lets bring it together in one file:
 <<lex>>
 <<classifiers>>
 <<tokens>>
+<<read chunk>>
 @
 
 \section{The Parser}
@@ -327,25 +355,12 @@ Terminals
 % specials:
     ',' '\n' '.' '$' '-' '+'
 % categories:
-    'integer'
-    'letter'
-    'whitespace'
+    'integer' 'letter' 'whitespace'
 % tokens
-    'append_tok'
-    'change_tok'
-    'delete_tok'
-    'edit_tok'
-    'global_tok'
-    'insert_tok'
-    'join_tok'
-    'print_tok'
-    'quit_tok'
-    'read_tok'
-    'replace_tok'
-    'undo_tok'
-    'write_tok'
-    'paste_tok'
-    'yank_tok'.
+    'append_tok' 'change_tok' 'delete_tok'  'edit_tok'
+    'global_tok' 'insert_tok' 'join_tok'    'print_tok'
+    'quit_tok'   'read_tok'   'replace_tok' 'undo_tok'
+    'write_tok'  'paste_tok'  'yank_tok'.
 @
 
 Note that [[integer]] and [[atom]] are provided by [[erl_scan]] and are simply
@@ -471,7 +486,7 @@ space ->
 	['$1'].
 
 filename ->
-    'append_tok' :
+    'letter' :
 	{filename, ['$1']}.
 
 regex ->
@@ -479,48 +494,62 @@ regex ->
 	{regex, ['$1']}.
 
 append ->
-    region 'append_tok' :
+    address 'append_tok' :
 	{append, '$1'}.
+
 change ->
     region 'change_tok' :
 	{change, '$1'}.
+
 delete ->
     region 'delete_tok' :
 	{delete, '$1'}.
+
 edit ->
     'edit_tok' space filename :
 	{edit, '$3'}.
+
 global -> % addr?
     'global_tok' regex :
 	{global, '$2'}.
+
 insert ->
     region 'insert_tok' :
 	{insert, '$1'}.
+
 join ->
     region 'join_tok' :
 	{join, '$1'}.
+
 <<parser print>>
+
 quit ->
     'quit_tok' :
         {quit, []}.
+
 read ->
     'read_tok' space filename :
 	{read, '$3'}.
+
 replace ->
     'replace_tok' regex filename :
 	{replace, ['$2'|'$3']}.
+
 undo ->
     'undo_tok' :
 	{undo, []}.
+
 write ->
     'write_tok' :
 	{write, []}.
 write ->
     'write_tok' space filename :
 	{write, '$3'}.
+
 paste ->
     region 'paste_tok' :
 	{paste, '$1'}.
+
 yank ->
     region 'yank_tok' :
 	{yank, '$1'}.
@@ -536,8 +565,131 @@ So, all in all, the parser becomes:
 
 \section{The Buffer Data Structure}
 
+Ok, time to loose some words about what the buffer needs to do.
+The manipulations of the different commands fall into a few simple categories:
+
+\begin{itemize}
+
+\item
+getting a region from the buffer
+
+\item
+changing (i.e. replacing) a region from the buffer with someting else
+
+\item
+appending after or inserting before a given address.
+
+\end{itemize}
+
+For creation we'll just allow creating empty buffers. Reading stuff from file
+will be the job of the read command, which we'll then call implicitly at
+startup if we have a filename argument on the command line. We'll also need
+some operation to figure out how long it is.
+
+this leads to the following function exports:
+<<buffer exports>>=
+-export([new/0, get/2, set/3, put/3, len/1]).
+@
+
+Though it might not be efficient, it is certainly clearest to modify the
+buffer as a list of strings (that is, a list of lists) for now. Each string
+represents one line, so they should all be newline-terminated (except perhaps
+the last).
+
+An empty buffer as returned by [[new/0]] is therefore just a tag indicating
+that this really is a buffer, and an empty list:
+<<buffer new>>=
+new() ->
+    {buffer, []}.
+@
+
+Pretty simple, huh? Getting a region is also not very hard, once we have
+figured out how to present a region. We'll just go with absolute addresses
+here, and do the computation of what [[.]] or [[$]] is somewhere else (this
+can be computed using [[length/1]]). This may not be sufficient for regular
+expressions, but we'll take care of that later.
+
+<<buffer get>>=
+len({buffer, L}) when is_list(L) ->
+    len(L).
+
+get({buffer, Ls}, {region, First, Last}) ->
+    F = fun(Line,{Pos,Res}=Acc) ->
+	    %io:format( "~p < ~p < ~p?~n", [ First, Pos, Last ]),
+	    if
+		Pos < First ->
+		    %io:format( "Discarding1 ~p~n", [ Line ]),
+		    {Pos+1,Res};
+		Pos >= First, Pos =< Last ->
+		    %io:format( "Adding ~p~n", [ Line ]),
+		    {Pos+1,[Line|Res]};
+		Pos > Last ->
+		    %io:format( "Discarding2 ~p~n", [ Line ]),
+		    {Pos+1,Res};
+		true ->
+		    io:format( "~p < ~p < ~p?~n", [ First, Pos, Last ]),
+		    Acc
+	    end
+	end,
+    { _, R } = lists:foldl(F, {1,[]}, Ls),
+    lists:reverse(R).
+@
+
+Putting just means inserting new text after the specified line. We allow
+putting at line 0 to insert to the beginning. So put does essentially the same
+as the [[a]]-command.
+
+<<buffer put>>=
+put({ buffer, Ls } = _Buf, { address, A }, Chunk) when A >= 0 ->
+    %true = len(Buf) >= A,
+    %io:format( "appending ~p (~p)~n", [ Chunk, A ]),
+    F = fun( L, { Pos , Res } = _Acc) ->
+	    if
+		Pos == A ->
+		    %io:format( "APPending ~p~n", [ Chunk ]),
+		    { Pos+1, [ L, Chunk | Res ]};
+		Pos /= A ->
+		    %io:format( "~p not right ~p~n", [ Pos, A ]),
+		    { Pos+1, [ L | Res ]}
+	    end
+	end,
+    { Len, R } = lists:foldl( F, { 0, []}, Ls ),
+    if
+	Len == A ->
+	    { buffer, Ls ++ Chunk };
+	Len /= A ->
+	    { buffer, lists:reverse( R )}
+    end.
+@
+
+Setting on the other hand means taking out a region and replacing it by
+something else -- similar to what the [[c]]- and [[s]]-commands do.
+
+<<buffer set>>=
+set({buffer, Ls}=_Buf,{region, First, Last},Chunk) ->
+    F = fun(L,{Pos,Res}) ->
+	    if
+		Pos < First ->
+		    {Pos+1,[L|Res]};
+		Pos == First ->
+		    {Pos+1,[Chunk|Res]};
+		Pos > First, Pos =< Last ->
+		    {Pos+1,Res};
+		Pos > Last ->
+		    {Pos+1,[L|Res]}
+	    end
+	end,
+    { _, R } = lists:foldl(F, {1,[]}, Ls),
+    {buffer,lists:reverse(R)}.
+@
+
 <<[[ed_buffer.erl]]>>=
 <<buffer head>>
+<<buffer exports>>
+<<buffer new>>
+<<buffer get>>
+<<buffer put>>
+<<buffer set>>
 @
 
 \section{The Main Module}
@@ -547,36 +699,75 @@ the resulting syntax tree, or exits.
 
 <<main parse>>=
 start() ->
-    loop().
+    loop({ state, ed_buffer:new(), 0 }).
 
-loop() ->
-    case step() of
-        true ->
-            loop();
+loop(State) ->
+    case step( State ) of
+        { true, NewState } ->
+            loop( NewState );
         false ->
             "Bye"
     end.
 
-step() ->
-    { ok, T, 1 }= ed_scanner:scan(),
+step( State ) ->
+    case ed_scanner:scan() of
+	{ ok, T, 1 } ->
+	    step_process( T, State );
+	{ eof, _ } ->
+	    io:put_chars( "\nNot Ignoring EOF, also quit with q\n" ),
+	    false;
+	Crap ->
+	    io:format( "Lexer talking shit: ~p~n", [ Crap ]),
+	    false
+    end.
+
+step_process( T, State ) ->
     case ed_parser:parse( T ) of
         { ok, S } ->
             if
                 is_tuple( S ), S == { quit, [] } ->
                     false;
                 true ->
-                    io:format( "S-Tree: ~w~n", [ S ]),
-                    true
+                    io:format( "S-Tree: ~p~n", [ S ]),
+		    NewState=eat( S, State ),
+                    { true, NewState }
             end;
         { error, { _Line, ed_parser, [ Err, Message ]}} ->
             io:format( "? ~s~s~n", [ Err, Message ]),
-            true
+            { true, State }
     end.
 @ 
+
+<<main eat>>=
+% will be moved out later
+eat({ Command, Args },{ state, Buf, Dot } = State) ->
+    case Command of
+	append ->
+	    Ch = ed_scanner:read_chunk(),
+	    [ address, {integer, 1, Addr }] = Args,
+	    NewBuf = ed_buffer:put( Buf, { address, Addr }, Ch),
+	    { state, NewBuf, Dot };
+	print ->
+	    [region,[address,{integer,1,First}],_,[address,{integer,1,Last}]] = Args,
+	    Out = ed_buffer:get( Buf, {region, First, Last} ),
+	    %io:format( "Out is ~p~n", [ Out ]),
+	    if
+		Out /= [] ->
+		    io:put_chars( Out );
+		Out == [] ->
+		    io:format ( "buffer is ~p~n", [ Buf ])
+	    end,
+	    State;
+	_ ->
+	    io:format( "Do Nothing!~n", []),
+	    State
+    end.
+@
 
 <<[[ed_main.erl]]>>=
 <<main head>>
 <<main parse>>
+<<main eat>>
 @
 
 \section{The Startup Script}
