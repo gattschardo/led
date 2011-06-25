@@ -325,11 +325,27 @@ The terminal symbols for the grammar are as follows:
 <<parser terminals>>=
 Terminals 
 % specials:
-',' '\n' '.' '$' '-' '+'
+    ',' '\n' '.' '$' '-' '+'
 % categories:
-'integer' 'letter'
+    'integer'
+    'letter'
+    'whitespace'
 % tokens
-'print_tok' 'quit_tok'.
+    'append_tok'
+    'change_tok'
+    'delete_tok'
+    'edit_tok'
+    'global_tok'
+    'insert_tok'
+    'join_tok'
+    'print_tok'
+    'quit_tok'
+    'read_tok'
+    'replace_tok'
+    'undo_tok'
+    'write_tok'
+    'paste_tok'
+    'yank_tok'.
 @
 
 Note that [[integer]] and [[atom]] are provided by [[erl_scan]] and are simply
@@ -338,7 +354,12 @@ Erlang integers resp. atoms.
 The nonterminals that we will need are the following
 
 <<parser nonterminals>>=
-Nonterminals input command region print quit.
+Nonterminals
+% general
+    input command address region filename space regex
+% commands
+    append change delete edit global insert join print 
+    quit read replace undo write paste yank.
 @
 
 We will of course be parsing commands one by one, but in non-interactive mode
@@ -365,46 +386,144 @@ print ->
         {print, [region, {'.', 1}]}.
 @
 
-<<parser top>>=
+<<parser rules>>=
 input ->
     command '\n' :
         '$1'.
 
+command ->
+    append :
+        '$1'.
+command ->
+    change :
+        '$1'.
+command ->
+    delete :
+	'$1'.
+command ->
+    edit :
+	'$1'.
+command ->
+    global :
+	'$1'.
+command ->
+    insert :
+	'$1'.
+command ->
+    join :
+	'$1'.
 command ->
     print :
         '$1'.
 command ->
     quit :
         '$1'.
+command ->
+    read :
+	'$1'.
+command ->
+    replace :
+	'$1'.
+command ->
+    undo :
+	'$1'.
+command ->
+    write :
+	'$1'.
+command ->
+    paste :
+	'$1'.
+command ->
+    yank :
+	'$1'.
 
+address ->
+    'integer' :
+	[address, '$1'].
+address ->
+    '.' :
+	[address, '$1'].
+address ->
+    '$' :
+	[address, '$1'].
+address ->
+    '-' 'integer' :
+        [address, '$1', '$2'].
+address ->
+    '+' 'integer' :
+        [address, '$1', '$2'].
+address ->
+    '-' :
+        [address, '$1', {integer, 1, 1}].
+address ->
+    '+' :
+        [address, '$1', {integer, 1, 1}].
+
+region ->
+    address ',' address :
+        [region, '$1', '$2', '$3'].
+
+space ->
+    'whitespace' space :
+	['$1'|'$2'].
+space ->
+    'whitespace' :
+	['$1'].
+
+filename ->
+    'append_tok' :
+	{filename, ['$1']}.
+
+regex ->
+    'append_tok' :
+	{regex, ['$1']}.
+
+append ->
+    region 'append_tok' :
+	{append, '$1'}.
+change ->
+    region 'change_tok' :
+	{change, '$1'}.
+delete ->
+    region 'delete_tok' :
+	{delete, '$1'}.
+edit ->
+    'edit_tok' space filename :
+	{edit, '$3'}.
+global -> % addr?
+    'global_tok' regex :
+	{global, '$2'}.
+insert ->
+    region 'insert_tok' :
+	{insert, '$1'}.
+join ->
+    region 'join_tok' :
+	{join, '$1'}.
+<<parser print>>
 quit ->
     'quit_tok' :
         {quit, []}.
-
-region ->
-    'integer' ',' 'integer' :
-        [region, '$1', '$2', '$3'].
-region ->
-    'integer' :
-        [region, '$1'].
-region ->
-    '.' :
-        [region, '$1'] .
-region ->
-    '$' :
-        [region, '$1'] .
-region ->
-    '-' 'integer' :
-        [region, '$1', '$2'].
-region ->
-    '+' 'integer' :
-        [region, '$1', '$2'].
-region ->
-    '-' :
-        [region, '$1', {integer, 1, 1}].
-region ->
-    '+' :
-        [region, '$1', {integer, 1, 1}].
+read ->
+    'read_tok' space filename :
+	{read, '$3'}.
+replace ->
+    'replace_tok' regex filename :
+	{replace, ['$2'|'$3']}.
+undo ->
+    'undo_tok' :
+	{undo, []}.
+write ->
+    'write_tok' :
+	{write, []}.
+write ->
+    'write_tok' space filename :
+	{write, '$3'}.
+paste ->
+    region 'paste_tok' :
+	{paste, '$1'}.
+yank ->
+    region 'yank_tok' :
+	{yank, '$1'}.
 @
 
 So, all in all, the parser becomes:
@@ -412,8 +531,7 @@ So, all in all, the parser becomes:
 <<parser nonterminals>>
 <<parser terminals>>
 <<parser root>>
-<<parser top>>
-<<parser print>>
+<<parser rules>>
 @
 
 \section{The Buffer Data Structure}
@@ -486,4 +604,4 @@ It's fun, try it!
 
 \end{document}
 
-% vim: se tw=78 sw=4 et:
+% vim: se tw=78 sw=4 sts=4:
