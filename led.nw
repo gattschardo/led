@@ -372,6 +372,7 @@ The nonterminals that we will need are the following
 Nonterminals
 % general
     input command address region filename space regex
+    addressed_command region_command word char
 % commands
     append change delete edit global insert join print 
     quit read replace undo write paste yank.
@@ -394,89 +395,118 @@ action:
 
 <<parser print>>=
 print ->
-    region 'print_tok' :
-        {print, '$1'}.
-print ->
     'print_tok' :
-        {print, [region, {'.', 1}]}.
+        print.
 @
 
 <<parser rules>>=
 input ->
     command '\n' :
         '$1'.
+input ->
+    '\n' :
+	{print,{region,{address,dot},{address,dot}}}.
 
-command ->
-    append :
-        '$1'.
-command ->
-    change :
-        '$1'.
-command ->
-    delete :
-	'$1'.
+% stand-alone
 command ->
     edit :
-	'$1'.
-command ->
-    global :
-	'$1'.
-command ->
-    insert :
-	'$1'.
-command ->
-    join :
-	'$1'.
-command ->
-    print :
-        '$1'.
+	{'$1', []}.
 command ->
     quit :
-        '$1'.
-command ->
-    read :
-	'$1'.
-command ->
-    replace :
-	'$1'.
+        {'$1', []}.
 command ->
     undo :
-	'$1'.
+	{'$1', []}.
 command ->
-    write :
-	'$1'.
+    address :
+	{print, {region,'$1','$1'}}.
 command ->
+    addressed_command :
+	{'$1', {address,dot}}.
+command ->
+    address addressed_command :
+	{'$2', '$1'}.
+command ->
+    region_command :
+	{'$1', {region,{address,dot},{address,dot}}}.
+command ->
+    address region_command :
+	{'$2', {region,'$1','$1'}}.
+command ->
+    region region_command :
+	{'$2', '$1'}.
+
+% with address
+addressed_command ->
+    append :
+        '$1'.
+addressed_command ->
+    insert :
+	'$1'.
+addressed_command ->
+    read :
+	'$1'.
+addressed_command ->
     paste :
 	'$1'.
-command ->
+
+% with region or address
+region_command ->
+    change :
+        '$1'.
+region_command ->
+    delete :
+	'$1'.
+region_command ->
+    global :
+	'$1'.
+region_command ->
+    join :
+	'$1'.
+region_command ->
+    print :
+        '$1'.
+region_command ->
+    replace :
+	'$1'.
+region_command ->
+    write :
+	'$1'.
+region_command ->
     yank :
 	'$1'.
 
 address ->
     'integer' :
-	[address, '$1'].
+	{integer,1,L} = '$1',
+	{address, L}.
 address ->
     '.' :
-	[address, '$1'].
+	{address, dot}.
 address ->
     '$' :
-	[address, '$1'].
+	{address, dollar}.
 address ->
     '-' 'integer' :
-        [address, '$1', '$2'].
+	{integer,1,L} = '$2',
+        {rel_address, minus, L}.
 address ->
     '+' 'integer' :
-        [address, '$1', '$2'].
+	{integer,1,L} = '$2',
+        {rel_address, plus, L}.
 address ->
     '-' :
-        [address, '$1', {integer, 1, 1}].
+        {rel_address, minus, 1}.
 address ->
     '+' :
-        [address, '$1', {integer, 1, 1}].
+        {rel_address, plus, 1}.
 
 region ->
     address ',' address :
-        [region, '$1', '$2', '$3'].
+        {region, '$1', '$3'}.
+region ->
+    address :
+	{region, '$1', '$1'}.
 
 space ->
     'whitespace' space :
@@ -486,24 +516,131 @@ space ->
 	['$1'].
 
 filename ->
+    word :
+	{filename, '$1'}.
+
+char ->
     'letter' :
-	{filename, ['$1']}.
+	{letter, 1, L} = '$1',
+	L.
+char ->
+    'integer' :
+	{integer, 1, N} = '$1',
+	integer_to_list( N ).
+char ->
+    ',' :
+	{A, 1} = '$1',
+	atom_to_list(A).
+char ->
+    '.' :
+	{A, 1} = '$1',
+	atom_to_list(A).
+char ->
+    '$' :
+	{A, 1} = '$1',
+	atom_to_list(A).
+char ->
+    '-' :
+	{A, 1} = '$1',
+	atom_to_list(A).
+char ->
+    '+' :
+	{A, 1} = '$1',
+	atom_to_list(A).
+char ->
+    'append_tok' :
+	{_, 1, C} = '$1',
+	C.
+char ->
+    'change_tok' :
+	{_, 1, C} = '$1',
+	C.
+char ->
+    'delete_tok' :
+	{_, 1, C} = '$1',
+	C.
+char ->
+    'edit_tok' :
+	{_, 1, C} = '$1',
+	C.
+char ->
+    'global_tok' :
+	{_, 1, C} = '$1',
+	C.
+char ->
+    'insert_tok' :
+	{_, 1, C} = '$1',
+	C.
+char ->
+    'join_tok' :
+	{_, 1, C} = '$1',
+	C.
+char ->
+    'print_tok' :
+	{_, 1, C} = '$1',
+	C.
+char ->
+    'quit_tok' :
+	{_, 1, C} = '$1',
+	C.
+char ->
+    'read_tok' :
+	{_, 1, C} = '$1',
+	C.
+char ->
+    'replace_tok' :
+	{_, 1, C} = '$1',
+	C.
+char ->
+    'undo_tok' :
+	{_, 1, C} = '$1',
+	C.
+char ->
+    'write_tok' :
+	{_, 1, C} = '$1',
+	C.
+char ->
+    'paste_tok' :
+	{_, 1, C} = '$1',
+	C.
+char ->
+    'yank_tok' :
+	{_, 1, C} = '$1',
+	C.
+
+word ->
+    char word :
+	if
+	    is_list('$1') ->
+		%io:format( "prepending str ~p~n", [ '$1' ]),
+		'$1' ++ '$2';
+	    true ->
+		['$1'|'$2']
+	end.
+word ->
+    char :
+	if
+	    is_list('$1') ->
+		'$1';
+	    true ->
+		['$1']
+	end.
 
 regex ->
     'append_tok' :
 	{regex, ['$1']}.
 
 append ->
-    address 'append_tok' :
-	{append, '$1'}.
+    'append_tok' :
+	append.
 
 change ->
-    region 'change_tok' :
-	{change, '$1'}.
+    'change_tok' :
+	change.
 
 delete ->
-    region 'delete_tok' :
-	{delete, '$1'}.
+    'delete_tok' :
+	delete.
 
 edit ->
     'edit_tok' space filename :
@@ -514,45 +651,48 @@ global -> % addr?
 	{global, '$2'}.
 
 insert ->
-    region 'insert_tok' :
-	{insert, '$1'}.
+    'insert_tok' :
+	insert.
 
 join ->
-    region 'join_tok' :
-	{join, '$1'}.
+    'join_tok' :
+	join.
 
 <<parser print>>
 
 quit ->
     'quit_tok' :
-        {quit, []}.
+        quit.
 
+read ->
+    'read_tok' :
+	{read, noname}.
 read ->
     'read_tok' space filename :
 	{read, '$3'}.
 
 replace ->
     'replace_tok' regex filename :
-	{replace, ['$2'|'$3']}.
+	replace.
 
 undo ->
     'undo_tok' :
-	{undo, []}.
+	undo.
 
 write ->
     'write_tok' :
-	{write, []}.
+	{write, noname}.
 write ->
     'write_tok' space filename :
 	{write, '$3'}.
 
 paste ->
-    region 'paste_tok' :
-	{paste, '$1'}.
+    'paste_tok' :
+	paste.
 
 yank ->
-    region 'yank_tok' :
-	{yank, '$1'}.
+    'yank_tok' :
+	yank.
 @
 
 So, all in all, the parser becomes:
@@ -705,6 +845,9 @@ loop(State) ->
     case step( State ) of
         { true, NewState } ->
             loop( NewState );
+	{ switch, NewState } ->
+	    io:format( "switching to new code :)~n", []),
+	    ed_main:loop( NewState );
         false ->
             "Bye"
     end.
@@ -726,7 +869,14 @@ step_process( T, State ) ->
         { ok, S } ->
             if
                 is_tuple( S ), S == { quit, [] } ->
-                    false;
+		    % reread files
+		    F = fun(M) ->
+			    code:purge( M ),
+			    code:load_file( M )
+			end,
+		    lists:foreach( F, [ ed_main, ed_parser, ed_scanner, ed_buffer ]),
+		    { switch, State };
+                    %false;
                 true ->
                     io:format( "S-Tree: ~p~n", [ S ]),
 		    NewState=eat( S, State ),
@@ -740,28 +890,41 @@ step_process( T, State ) ->
 
 <<main eat>>=
 % will be moved out later
-eat({ Command, Args },{ state, Buf, Dot } = State) ->
+eat({ Command, Args }, { state, Buf, Dot } = State) ->
     case Command of
 	append ->
 	    Ch = ed_scanner:read_chunk(),
-	    [ address, {integer, 1, Addr }] = Args,
-	    NewBuf = ed_buffer:put( Buf, { address, Addr }, Ch),
+	    Addr = convert_addr( Args, Dot ),
+	    NewBuf = ed_buffer:put( Buf, Addr, Ch),
 	    { state, NewBuf, Dot };
 	print ->
-	    [region,[address,{integer,1,First}],_,[address,{integer,1,Last}]] = Args,
-	    Out = ed_buffer:get( Buf, {region, First, Last} ),
-	    %io:format( "Out is ~p~n", [ Out ]),
+	    Region = convert_region( Args, Dot ),
+	    Out = ed_buffer:get( Buf, Region ),
 	    if
 		Out /= [] ->
 		    io:put_chars( Out );
 		Out == [] ->
-		    io:format ( "buffer is ~p~n", [ Buf ])
+		    void
 	    end,
 	    State;
 	_ ->
-	    io:format( "Do Nothing!~n", []),
+	    %io:format( "Do Nothing!~n", []),
 	    State
     end.
+
+convert_addr({ address, _I } = A, _Dot ) ->
+    A;
+convert_addr({ address, dot }, Dot ) ->
+    { address, Dot };
+convert_addr({ rel_address, minus, I }, Dot ) ->
+    { address, Dot-I };
+convert_addr({ rel_address, plus, I }, Dot ) ->
+    { address, Dot+I }.
+
+convert_region({ region, F, L }, Dot) ->
+    F1 = convert_addr( F, Dot ),
+    L1 = convert_addr( L, Dot ),
+    { region, F1, L1 }.
 @
 
 <<[[ed_main.erl]]>>=
