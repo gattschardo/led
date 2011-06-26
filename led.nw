@@ -410,7 +410,7 @@ input ->
 % stand-alone
 command ->
     edit :
-	{'$1', []}.
+	'$1'.
 command ->
     quit :
         {'$1', []}.
@@ -630,6 +630,9 @@ regex ->
     'append_tok' :
 	{regex, ['$1']}.
 
+
+%% Commands
+
 append ->
     'append_tok' :
 	append.
@@ -771,6 +774,7 @@ get({buffer, Ls}, {region, First, Last}) ->
 		    Acc
 	    end
 	end,
+    %io:format( "getting ~p-~p~n", [ First, Last ]),
     { _, R } = lists:foldl(F, {1,[]}, Ls),
     lists:reverse(R).
 @
@@ -787,7 +791,7 @@ put({ buffer, Ls } = _Buf, { address, A }, Chunk) when A >= 0 ->
 	    if
 		Pos == A ->
 		    %io:format( "APPending ~p~n", [ Chunk ]),
-		    { Pos+1, [ L, Chunk | Res ]};
+		    { Pos+1, [ L | Chunk ] ++ Res};
 		Pos /= A ->
 		    %io:format( "~p not right ~p~n", [ Pos, A ]),
 		    { Pos+1, [ L | Res ]}
@@ -904,7 +908,7 @@ eat({ Command, Args }, { state, Buf, Dot } = State) ->
 		Out /= [] ->
 		    io:put_chars( Out );
 		Out == [] ->
-		    void
+		    io:format( "No output: ~p~n", [ Buf ])
 	    end,
 	    State;
 	_ ->
@@ -912,18 +916,18 @@ eat({ Command, Args }, { state, Buf, Dot } = State) ->
 	    State
     end.
 
-convert_addr({ address, _I } = A, _Dot ) ->
-    A;
 convert_addr({ address, dot }, Dot ) ->
     { address, Dot };
+convert_addr({ address, _I } = A, _Dot ) ->
+    A;
 convert_addr({ rel_address, minus, I }, Dot ) ->
     { address, Dot-I };
 convert_addr({ rel_address, plus, I }, Dot ) ->
     { address, Dot+I }.
 
 convert_region({ region, F, L }, Dot) ->
-    F1 = convert_addr( F, Dot ),
-    L1 = convert_addr( L, Dot ),
+    { address, F1 } = convert_addr( F, Dot ),
+    { address, L1 } = convert_addr( L, Dot ),
     { region, F1, L1 }.
 @
 
